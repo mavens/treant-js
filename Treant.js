@@ -2063,57 +2063,67 @@
 
     var JSONconfig = {
         make: function( configArray ) {
-
-            var i = configArray.length, node;
-
             this.jsonStructure = {
                 chart: null,
                 nodeStructure: null
             };
-            //fist loop: find config, find root;
-            while(i--) {
-                node = configArray[i];
-                if (node.hasOwnProperty('container')) {
-                    this.jsonStructure.chart = node;
-                    continue;
-                }
-
-                if (!node.hasOwnProperty('parent') && ! node.hasOwnProperty('container')) {
-                    this.jsonStructure.nodeStructure = node;
-                    node._json_id = 0;
-                }
+            
+            var chartConfigIndex = configArray.findIndex((chartConfig) => chartConfig.hasOwnProperty('container'));
+            if(chartConfigIndex > -1) {
+                this.jsonStructure.chart = configArray[chartConfigIndex];
+                configArray.splice(chartConfigIndex, 1);
             }
+            this.jsonStructure.nodeStructure = configArray.find((rootNode) => !rootNode.hasOwnProperty('container') && !rootNode.hasOwnProperty('parent'));
+
+            configArray.filter((node) => !node.hasOwnProperty('container')).forEach((node) => {
+                node._json_id = this.getID();
+            });
 
             this.findChildren(configArray);
 
+            console.log('jsonStructure', this.jsonStructure);
             return this.jsonStructure;
         },
 
         findChildren: function(nodes) {
-            var parents = [0]; // start with a a root node
+            var parents = [nodes[0]]; // start with the root node
+
+            console.log('nodes', nodes);
 
             while(parents.length) {
-                var parentId = parents.pop(),
-                    parent = this.findNode(this.jsonStructure.nodeStructure, parentId),
-                    i = 0, len = nodes.length,
+                var parent = parents.pop(),
+                    parentId = parent._json_id,
                     children = [];
 
-                for(;i<len;i++) {
-                    var node = nodes[i];
-                    if(node.parent && (node.parent._json_id === parentId)) { // skip config and root nodes
+                console.log('processing parent', parent, 'withId', parentId);
 
-                        node._json_id = this.getID();
+                nodes.forEach((possibleChildNode) => {
+                    console.log('possibleChildNode', possibleChildNode);
+                    if(possibleChildNode.parent && (possibleChildNode.parent._json_id === parentId)) { // skip config and root nodes
+                        delete possibleChildNode.parent;
 
-                        delete node.parent;
-
-                        children.push(node);
-                        parents.push(node._json_id);
+                        children.push(possibleChildNode);
+                        parents.push(possibleChildNode);
                     }
-                }
 
-                if (children.length) {
-                    parent.children = children;
-                }
+                    if(possibleChildNode.parents) {
+                        var childParentIndex = possibleChildNode.parents.findIndex((parent) => parent._json_id === parentId);
+                        console.log('childParentIndex', childParentIndex, 'parentId', parentId);
+                        if(childParentIndex > -1) {
+                            children.push(possibleChildNode);
+                            parents.push(possibleChildNode);
+
+                            possibleChildNode.parents.splice(childParentIndex, 1);
+                            if(possibleChildNode.parents.length === 0) {
+                                delete possibleChildNode.parents;
+                            }
+                        }
+                    }
+
+                    if (children.length) {
+                        parent.children = children;
+                    }
+                });
             }
         },
 
@@ -2136,7 +2146,7 @@
 
         getID: (
             function() {
-                var i = 1;
+                var i = 0;
                 return function() {
                     return i++;
                 };
